@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#7c3aed">
+<title>فحص PWA</title>
+<style>
+body{font-family:system-ui,sans-serif;margin:0;padding:20px;background:#0b0b12;color:#fff;max-width:640px;margin-inline:auto}
+h1{font-size:1.3rem}h2{font-size:1rem;margin:22px 0 8px;color:#c4b5fd}
+.r{display:flex;gap:10px;align-items:center;padding:8px 12px;margin:4px 0;border-radius:10px;background:#1a1a26;font-size:.92rem}
+.r b{flex:none;width:22px}.ok b{color:#4ade80}.no b{color:#f87171}.r small{color:#a1a1b5;margin-inline-start:auto;direction:ltr}
+#sum{margin-top:18px;padding:12px;border-radius:12px;font-weight:700;text-align:center}
+</style>
+</head>
+<body>
+<h1>فحص ملفات وتر (PWA)</h1>
+<h2>الملفات</h2><div id="files"></div>
+<h2>Service Worker</h2><div id="sw"></div>
+<h2>Manifest</h2><div id="mf"></div>
+<div id="sum">جاري الفحص…</div>
+<script>
+var FILES=["index.html","manifest.webmanifest","sw.js","storage.js","check.html","icon-192.png","icon-512.png","maskable-192.png","maskable-512.png","apple-touch-icon.png","favicon-32.png"];
+var bad=0;
+function row(id,ok,t,s){if(!ok)bad++;var d=document.createElement("div");d.className="r "+(ok?"ok":"no");d.innerHTML="<b>"+(ok?"✔":"✘")+"</b><span>"+t+"</span><small>"+(s||"")+"</small>";document.getElementById(id).appendChild(d)}
+function sz(r){return r.blob().then(function(b){return b.size})}
+async function run(){
+ for(var f of FILES){
+  try{var r=await fetch(f,{cache:"no-store"});row("files",r.ok,f,r.ok?(await sz(r))+" B":r.status)}
+  catch(e){row("files",false,f,"offline/err")}
+ }
+ if(!("serviceWorker" in navigator))row("sw",false,"المتصفح لا يدعم Service Worker");
+ else{
+  try{
+   var reg=await navigator.serviceWorker.getRegistration();
+   if(!reg){await navigator.serviceWorker.register("sw.js");reg=await navigator.serviceWorker.ready}
+   row("sw",!!reg,"التسجيل","scope: "+reg.scope);
+   var st=reg.active?reg.active.state:(reg.waiting?"waiting":"installing");
+   row("sw",st=="activated","الحالة",st);
+   var ks=await caches.keys();var n=0;
+   for(var k of ks){n+=(await(await caches.open(k)).keys()).length}
+   row("sw",n>=FILES.length-1,"الملفات المخزنة للعمل بدون إنترنت",n+" ملف");
+   row("sw",!!navigator.serviceWorker.controller,"الصفحة تحت تحكم SW","أعد التحميل إن ظهرت ✘");
+  }catch(e){row("sw",false,"فشل التسجيل",String(e))}
+ }
+ try{
+  var m=await(await fetch("manifest.webmanifest",{cache:"no-store"})).json();
+  ["name","short_name","start_url","scope","display","icons"].forEach(function(k){row("mf",m[k]!=null&&m[k]!=="",k,typeof m[k]=="string"?m[k]:"")});
+  row("mf",m.display=="standalone","display = standalone");
+  row("mf",m.lang=="ar"&&m.dir=="rtl","lang/dir","ar / rtl");
+  var has192=0,has512=0,mask=0;
+  for(var i of m.icons||[]){
+   var ok=false;try{var q=await fetch(i.src,{cache:"no-store"});ok=q.ok}catch(e){}
+   row("mf",ok,"أيقونة "+i.src,i.sizes+" · "+i.purpose);
+   if(i.sizes=="192x192")has192=1;if(i.sizes=="512x512")has512=1;if(i.purpose=="maskable")mask=1;
+  }
+  row("mf",has192&&has512,"أيقونة 192 و512");row("mf",mask,"أيقونة maskable");
+ }catch(e){row("mf",false,"manifest غير صالح",String(e))}
+ var s=document.getElementById("sum");
+ s.textContent=bad?("توجد "+bad+" مشكلة"):"كل شيء سليم ✔";s.style.background=bad?"#7f1d1d":"#14532d";
+}
+run();
+</script>
+</body>
+</html>
